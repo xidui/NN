@@ -119,7 +119,7 @@ def single_layer_nn(hidden_dim=100, epoch=2000, input_dim=784, output_dim=10, se
             plt.xlabel('epoches')
             plt.ylabel('average loss')
             plt.legend(['train', 'valid'])
-            plt.savefig('picture/loss_{0}.png'.format(name))
+            plt.savefig('pictures/loss_{0}.png'.format(name))
 
         if (i + 1) % 10 == 0:
             epochs.append(i + 1)
