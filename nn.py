@@ -21,8 +21,15 @@ def relu(X):
     return np.maximum(X, 0)
 
 
+def plot(filename):
+    n = NN()
+    n.load_model(filename)
+    plot_data = n.load_plot_data(filename)
+    n.plot_data(filename, filename, plot_data)
+
+
 class NN:
-    def __init__(self, learning_rate=0.5, reg_lambda=0.0, momentum=0.5,
+    def __init__(self, learning_rate=0.5, reg_lambda=0.0, momentum=0.0,
                  dimensions=(784, 100, 10), seed=2017, active_function=sigmoid):
         np.random.seed(seed)
         self.seed = seed
@@ -70,11 +77,67 @@ class NN:
     def load_model(self, name):
         with open('models/{0}'.format(name), 'r') as json_data:
             model = json.load(json_data)
-            model['W'] = np.array(model['W'])
-            model['B'] = np.array(model['B'])
-            model['dW'] = np.array(model['dW'])
-            model['dB'] = np.array(model['dB'])
-            self.modes = model
+            model['W'] = [np.array(W) for W in model['W']]
+            model['B'] = [np.array(B) for B in model['B']]
+            model['dW'] = [np.array(dW) for dW in model['dW']]
+            model['dB'] = [np.array(dB) for dB in model['dB']]
+            self.models = model
+
+    def plot_model(self, title):
+        fig, ax = plt.subplots(nrows=10, ncols=10)
+        for r in range(10):
+            for c in range(10):
+                img = self.models['W'][0][:, r * 10 + c].reshape((28, 28))
+                ax[r][c].axis('off')
+                ax[r][c].imshow(img, cmap='gray')
+        if title:
+            fig.suptitle(title)
+        fig.show()
+
+    def plot_data(self, title, name, plot_data):
+        fig, ax = plt.subplots(nrows=2, ncols=1)
+        # plot loss
+        ax[0].set_ylim([0, 1.0])
+        ax[0].plot(plot_data['epochs'], plot_data['loss_train'], color='blue')
+        ax[0].plot(plot_data['epochs'], plot_data['loss_valid'], color='green')
+        ax[0].set_xlabel('epoches')
+        ax[0].set_ylabel('average loss')
+        ax[0].legend(['train', 'valid'])
+        # plot incorrect
+        ax[1].set_ylim([0, 1.0])
+        ax[1].plot(plot_data['epochs'], plot_data['train_incorrect'], color='blue')
+        ax[1].plot(plot_data['epochs'], plot_data['valid_incorrect'], color='green')
+        ax[1].set_xlabel('epoches')
+        ax[1].set_ylabel('incorrectness')
+        ax[1].legend(['train', 'valid'])
+        fig.suptitle(title)
+
+        if plot_data['best_fit_epoch']:
+            bfe = plot_data['best_fit_epoch']
+            ax[0].vlines(bfe, 0,
+                         max(max(plot_data['loss_train']), max(plot_data['loss_valid'])),
+                         color='red',
+                         linestyles='dashed',
+                         label='overfit')
+            ax[0].plot([bfe], [[plot_data['loss_train'][bfe/10-1]]], marker='o', markersize=3, color='red')
+            ax[0].annotate(' ' + str(round(plot_data['loss_train'][bfe/10-1], 6)),
+                           xy=(bfe, plot_data['loss_train'][bfe/10-1]))
+            ax[0].plot([bfe], [plot_data['loss_valid'][bfe / 10 - 1]], marker='o', markersize=3, color='red')
+            ax[0].annotate(' ' + str(round(plot_data['loss_valid'][bfe / 10 - 1], 6)),
+                           xy=(bfe, plot_data['loss_valid'][bfe / 10 - 1]))
+            ax[1].vlines(bfe, 0,
+                         max(max(plot_data['loss_train']), max(plot_data['loss_valid'])),
+                         color='red',
+                         linestyles='dashed',
+                         label='overfit')
+            ax[1].plot([bfe], [plot_data['train_incorrect'][bfe / 10 - 1]], marker='o', markersize=3, color='red')
+            ax[1].annotate(' ' + str(round(plot_data['train_incorrect'][bfe / 10 - 1], 6)),
+                           xy=(bfe, plot_data['train_incorrect'][bfe / 10 - 1]))
+            ax[1].plot([bfe], [plot_data['valid_incorrect'][bfe / 10 - 1]], marker='o', markersize=3, color='red')
+            ax[1].annotate(' ' + str(round(plot_data['valid_incorrect'][bfe / 10 - 1], 6)),
+                           xy=(bfe, plot_data['valid_incorrect'][bfe / 10 - 1]))
+
+        fig.savefig('pictures/loss_and_correct_{0}.png'.format(name))
 
     def save_plot_data(self, data, name):
         f = open('plot_data/{0}'.format(name), 'w')
@@ -112,12 +175,6 @@ class NN:
         return np.argmax(output, axis=1)
 
     def train(self, train_data_file, validate_data_file, epoches, start_from_latest=True):
-        X_train, Y_train = NN.read_data(train_data_file)  # X1: (3000, 784), Y (3000, 1)
-        X_validate, Y_validate = NN.read_data(validate_data_file)
-        Y_train = Y_train.astype(np.int64)
-        Y_validate = Y_validate.astype(np.int64)
-        training_size = Y_train.size
-
         plot_data = {
             'loss_train': [],
             'loss_valid': [],
@@ -143,6 +200,15 @@ class NN:
             if os.path.exists('models/{0}'.format(name)) and os.path.exists('plot_data/{0}'.format(name)):
                 self.load_model(name)
                 plot_data = self.load_plot_data(name)
+
+        if start_from > 3000 and plot_data['best_fit_epoch'] and start_from > 2 * plot_data['best_fit_epoch']:
+            return
+
+        X_train, Y_train = NN.read_data(train_data_file)  # X1: (3000, 784), Y (3000, 1)
+        X_validate, Y_validate = NN.read_data(validate_data_file)
+        Y_train = Y_train.astype(np.int64)
+        Y_validate = Y_validate.astype(np.int64)
+        training_size = Y_train.size
 
         for epoch in range(start_from + 1, epoches + 1):
             if epoch > 3000 and plot_data['best_fit_epoch'] and epoch > 2 * plot_data['best_fit_epoch']:
@@ -182,10 +248,13 @@ class NN:
                     print 'some thing wrong'
 
             # process results
-            name = 'seed_{0}_rate_{2}_momentum_{3}_dim_{4}_act_{5}_epoch_{1}'.format(
-                self.seed, epoch, self.learning_rate,
+            title = 'seed_{0}_rate_{1}_momentum_{2}_dim_{3}_act_{4}'.format(
+                self.seed, self.learning_rate,
                 self.momentum, '.'.join([str(d) for d in self.dimensions]),
                 self.active_function.__name__)
+            if self.reg_lambda != 0:
+                title = '{0}_reg_{1}'.format(title, self.reg_lambda)
+            name = '{0}_epoch_{1}'.format(title, epoch)
             if epoch % 10 == 0:
                 plot_data['epochs'].append(epoch)
 
@@ -213,52 +282,32 @@ class NN:
 
             if epoch % 1000 == 0:
                 self.save_model(name)
-                fig, ax = plt.subplots(nrows=2, ncols=1)
-                # plot loss
-                ax[0].set_ylim([0, 1.0])
-                ax[0].plot(plot_data['epochs'], plot_data['loss_train'], color='blue')
-                ax[0].plot(plot_data['epochs'], plot_data['loss_valid'], color='green')
-                if plot_data['best_fit_epoch']:
-                    ax[0].vlines(plot_data['best_fit_epoch'], 0,
-                                 max(max(plot_data['loss_train']), max(plot_data['loss_valid'])),
-                                 color='red',
-                                 linestyles='dashed',
-                                 label='overfit')
-                ax[0].set_xlabel('epoches')
-                ax[0].set_ylabel('average loss')
-                ax[0].legend(['train', 'valid'])
-                # plot incorrect
-                ax[1].set_ylim([0, 1.0])
-                ax[1].plot(plot_data['epochs'], plot_data['train_incorrect'], color='blue')
-                ax[1].plot(plot_data['epochs'], plot_data['valid_incorrect'], color='green')
-                ax[1].set_xlabel('epoches')
-                ax[1].set_ylabel('incorrectness')
-                ax[1].legend(['train', 'valid'])
-                fig.savefig('pictures/loss_and_correct_{0}.png'.format(name))
+                self.plot_data(title=title, plot_data=plot_data, name=name)
                 # save plot data
                 self.save_plot_data(plot_data, name)
 
 if __name__ == '__main__':
     # problem a, b
-    for seed in range(2017, 2022):
-        nn = NN(seed=seed, learning_rate=1.0, dimensions=(784, 100, 10), active_function=sigmoid)
-        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
+    # for seed in range(2017, 2022):
+    #     nn = NN(seed=seed, learning_rate=0.2, dimensions=(784, 100, 10), momentum=0.0, active_function=sigmoid)
+    #     nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
     # problem c
 
     # problem d
-    for rate in [0.1, 0.3, 0.5, 1]:
-        nn = NN(seed=2017, learning_rate=rate, dimensions=(784, 100, 10), active_function=sigmoid)
-        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
-    for momentum in [0.5, 0.9]:
-        nn = NN(seed=2017, learning_rate=0.5, dimensions=(784, 100, 10), active_function=sigmoid, momentum=momentum)
-        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
-
-    # problem e
-    for hidden in [20, 100, 200, 500]:
-        nn = NN(seed=2017, learning_rate=0.01, dimensions=(784, hidden, 10), active_function=sigmoid, momentum=0.5)
-        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
+    # for rate in [0.01, 0.2, 0.5]:
+    #     for momentum in [0.0, 0.5, 0.9]:
+    #         nn = NN(seed=2017, learning_rate=rate, dimensions=(784, 100, 10), active_function=sigmoid, momentum=momentum)
+    #         nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=20000)
+    #
+    # # problem e
+    # for hidden in [20, 100, 200, 500]:
+    #     nn = NN(seed=2017, learning_rate=0.3, dimensions=(784, hidden, 10), active_function=sigmoid, momentum=0.5)
+    #     nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
 
     # problem f
+    for reg in [0.1, 0.5, 0.05, 0.01]:
+        nn = NN(seed=2017, learning_rate=0.5, dimensions=(784, 100, 10), active_function=sigmoid, momentum=0.5, reg_lambda=reg)
+        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000, start_from_latest=False)
     # problem g
     # problem h
     # problem i
