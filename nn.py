@@ -30,7 +30,7 @@ def plot(filename):
 
 class NN:
     def __init__(self, learning_rate=0.5, reg_lambda=0.0, momentum=0.0,
-                 dimensions=(784, 100, 10), seed=2017, active_function=sigmoid):
+                 dimensions=(784, 100, 10), seed=2017, active_function=sigmoid, batch_norm=False):
         np.random.seed(seed)
         self.seed = seed
         self.learning_rate = learning_rate
@@ -38,6 +38,7 @@ class NN:
         self.momentum = momentum
         self.dimensions = dimensions
         self.active_function = active_function
+        self.bn = batch_norm
         self.models = {
             'W': [],
             'B': [],
@@ -155,6 +156,12 @@ class NN:
             W = self.models['W'][i]
             B = self.models['B'][i]
             X = intermediate_X[-1]
+
+            if self.bn:
+                _mean = X.mean(axis=0, keepdims=True)
+                var_2 = ((X - _mean) ** 2).mean(axis=0, keepdims=True) + 0.01
+                X = (X - _mean) / np.sqrt(var_2)
+
             U = X.dot(W) + B
             if i < len(self.dimensions) - 2:
                 intermediate_X.append(self.active_function(U))
@@ -174,7 +181,7 @@ class NN:
         output = self.forward_helper(X)[-1]
         return np.argmax(output, axis=1)
 
-    def train(self, train_data_file, validate_data_file, epoches, start_from_latest=True):
+    def train(self, train_data_file, validate_data_file, epoches, start_from_latest=True, batch=3000):
         plot_data = {
             'loss_train': [],
             'loss_valid': [],
@@ -214,38 +221,45 @@ class NN:
             if epoch > 3000 and plot_data['best_fit_epoch'] and epoch > 2 * plot_data['best_fit_epoch']:
                 break
 
-            # forward
-            intermediate_X = self.forward_helper(X_train)
+            batch_start = 0
+            while batch_start < training_size:
+                X_train_batch = X_train[range(batch_start, batch_start + batch), :]
+                Y_train_batch = Y_train[range(batch_start, batch_start + batch)]
+                training_size_batch = Y_train_batch.size
+                # forward
+                intermediate_X = self.forward_helper(X_train_batch)
 
-            # backward
-            output = intermediate_X[-1]
-            D = output
-            D[range(training_size), Y_train] -= 1
-            for i in range(len(self.dimensions) - 1)[::-1]:
-                dW = intermediate_X[i].T.dot(D) / training_size
-                dB = np.sum(D, axis=0, keepdims=True) / training_size
-                # weight decay (L2)
-                dW += self.reg_lambda * self.models['W'][i] / training_size
-                # momentum
-                dW = -self.learning_rate * dW + self.momentum * self.models['dW'][i]
-                dB = -self.learning_rate * dB + self.momentum * self.models['dB'][i]
-                self.models['W'][i] += dW
-                self.models['B'][i] += dB
-                # save dW for next iteration
-                self.models['dW'][i] = dW
-                self.models['dB'][i] = dB
-                # calculate new D
-                D = D.dot(self.models['W'][i].T)
-                if self.active_function == sigmoid:
-                    D = D * (intermediate_X[i] * (1 - intermediate_X[i]))
-                elif self.active_function == tanh:
-                    D = D * (1 - intermediate_X[i] * intermediate_X[i])
-                elif self.active_function == relu:
-                    tmp = np.maximum(intermediate_X[i], 0.0)
-                    tmp[tmp>0] = 1.0
-                    D = D * tmp
-                else:
-                    print 'some thing wrong'
+                # backward
+                output = intermediate_X[-1]
+                D = output
+                D[range(training_size_batch), Y_train_batch] -= 1
+                for i in range(len(self.dimensions) - 1)[::-1]:
+                    dW = intermediate_X[i].T.dot(D) / training_size_batch
+                    dB = np.sum(D, axis=0, keepdims=True) / training_size_batch
+                    # weight decay (L2)
+                    dW += self.reg_lambda * self.models['W'][i] / training_size_batch
+                    # momentum
+                    dW = -self.learning_rate * dW + self.momentum * self.models['dW'][i]
+                    dB = -self.learning_rate * dB + self.momentum * self.models['dB'][i]
+                    self.models['W'][i] += dW
+                    self.models['B'][i] += dB
+                    # save dW for next iteration
+                    self.models['dW'][i] = dW
+                    self.models['dB'][i] = dB
+                    # calculate new D
+                    D = D.dot(self.models['W'][i].T)
+                    if self.active_function == sigmoid:
+                        D = D * (intermediate_X[i] * (1 - intermediate_X[i]))
+                    elif self.active_function == tanh:
+                        D = D * (1 - intermediate_X[i] * intermediate_X[i])
+                    elif self.active_function == relu:
+                        tmp = np.maximum(intermediate_X[i], 0.0)
+                        tmp[tmp > 0] = 1.0
+                        D = D * tmp
+                    else:
+                        print 'some thing wrong'
+
+                batch_start += batch
 
             # process results
             title = 'seed_{0}_rate_{1}_momentum_{2}_dim_{3}_act_{4}'.format(
@@ -263,7 +277,7 @@ class NN:
                 plot_data['loss_train'].append(lt)
 
                 lv = self.average_loss(X_validate, Y_validate)
-                if len(plot_data['loss_valid']) and lv >= plot_data['loss_valid'][-1] and plot_data['best_fit_epoch'] is None and epoch > 200:
+                if len(plot_data['loss_valid']) and lv >= plot_data['loss_valid'][-1] and plot_data['best_fit_epoch'] is None and epoch > 500:
                     plot_data['best_fit_epoch'] = epoch
                     self.save_model(name + '_best')
 
@@ -305,9 +319,8 @@ if __name__ == '__main__':
     #     nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000)
 
     # problem f
-    for reg in [0.1, 0.5, 0.05, 0.01]:
-        nn = NN(seed=2017, learning_rate=0.5, dimensions=(784, 100, 10), active_function=sigmoid, momentum=0.5, reg_lambda=reg)
-        nn.train(train_data_file='digitstrain.txt', validate_data_file='digitsvalid.txt', epoches=10000, start_from_latest=False)
+    nn = NN(seed=2017, learning_rate=0.5, dimensions=(784, 100, 100, 10), active_function=sigmoid, momentum=0.5, reg_lambda=1.0)
+    nn.train(train_data_file='digitstrain.txt', validate_data_file='digitstest.txt', epoches=10000, start_from_latest=True)
     # problem g
     # problem h
     # problem i
