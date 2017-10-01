@@ -16,3 +16,5 @@ n = NN()
 n.load_model('model_data_in_models_dir')
 n.plot('model_data_in_models_dir')
 ```
+
+
