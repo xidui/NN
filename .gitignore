@@ -1,3 +1,14 @@
 .idea
 pictures
 models
+plot_data
+pictures_batch
+ae_models
+ae_pictures
+ae_plot_models
+rbm_models
+rbm_pictures
+rbm_plot_models
+models_backup
+pictures_backup
+plot_data_backup
