@@ -9,16 +9,23 @@ def sigmoid(X):
 
 
 class RBM:
-    def __init__(self, hidden=100, visible=28*28):
-        self.rs = np.random.RandomState(2017)
+    def __init__(self, hidden=100, visible=28*28, seed=2017):
+        self.rs = np.random.RandomState(seed)
         self.dimension = (visible, hidden)
         self.W = self.rs.normal(loc=0, scale=0.1, size=self.dimension)
         self.hBias = np.zeros(hidden)
         self.vBias = np.zeros(visible)
 
-        for dir in ['rbm_models', 'rbm_plot_models']:
+        for dir in ['rbm_models', 'rbm_plot_models', 'rbm_pictures']:
             if not os.path.exists(dir):
                 os.makedirs(dir)
+
+    def load_model(self, filename):
+        with open('rbm_models/{0}'.format(filename), 'r') as json_data:
+            data = json.load(json_data)
+            self.W = np.array(data['W'])
+            self.hBias = np.array(data['H'])
+            self.vBias = np.array(data['V'])
 
     @staticmethod
     def read_data(filename):
@@ -36,6 +43,7 @@ class RBM:
             ax[key / 5][key % 5 * 2].imshow(origin, cmap='gray')
             ax[key / 5][key % 5 * 2 + 1].imshow(after, cmap='gray')
         fig.savefig('rbmpicture.png')
+        plt.close()
 
     def plot_model(self, title):
         fig, ax = plt.subplots(nrows=10, ncols=10)
@@ -47,6 +55,20 @@ class RBM:
         if title:
             fig.suptitle(title)
         fig.savefig('rbm_plot_models/{0}.png'.format(title))
+        plt.close()
+
+    def plot_error(self, title, train_error, valid_error):
+        epoches = range(1, len(train_error) + 1)
+        plt.figure(1)
+        # plot loss
+        # ax[0].set_ylim([0, 1.0])
+        plt.plot(epoches, train_error, color='blue')
+        plt.plot(epoches, valid_error, color='green')
+        plt.ylabel('average loss')
+        plt.legend(['train', 'valid'])
+        plt.title(title)
+        plt.savefig('rbm_pictures/loss_{0}.png'.format(title))
+        plt.close()
 
     def save_model(self, name):
         model = {
@@ -94,6 +116,8 @@ class RBM:
         return cross_entropy
 
     def train(self, lr, k, batch_size, epoches, train_data, valid_data):
+        train_error = []
+        valid_error = []
         for epoch in range(1, epoches + 1):
             l = range(train_data.shape[0])
             np.random.shuffle(l)
@@ -103,21 +127,28 @@ class RBM:
                 chosen = train_data[chosen, :]
                 self.contrast_divergence(lr, k, chosen)
                 start += batch_size
-            if epoch % 50 == 0:
-                name = 'lr_{0}_k_{1}_batch_{2}_epoch_{3}'.format(lr, k, batch_size, epoch)
-                self.plot_model(name)
-                self.save_model(name)
             cross_entropy = self.reconstruction_cross_entropy(train_data)
             cross_entropy_2 = self.reconstruction_cross_entropy(valid_data)
             print '{0} {1} {2}'.format(epoch, cross_entropy, cross_entropy_2)
+            train_error.append(cross_entropy)
+            valid_error.append(cross_entropy_2)
 
-        pH, H_sample = self.sample_h_given_v(train_data)
-        pV, V_sample = self.sample_v_given_h(H_sample)
-        self.plot_v_vhv_picture(train_data, V_sample)
+            if epoch % 50 == 0:
+                name = 'lr_{0}_k_{1}_batch_{2}_epoch_{3}'.format(lr, k, batch_size, epoch)
+                if self.dimension[1] != 100:
+                    name = 'lr_{0}_hidden_{1}_k_{2}_batch_{3}_epoch_{4}'.format(lr, self.dimension[1], k, batch_size, epoch)
+                # self.plot_model(name)
+                self.save_model(name)
+                self.plot_error(name, train_error, valid_error)
+
+        # pH, H_sample = self.sample_h_given_v(train_data)
+        # pV, V_sample = self.sample_v_given_h(H_sample)
+        # # self.plot_v_vhv_picture(train_data, V_sample)
+        return train_error, valid_error
 
 
 if __name__ == '__main__':
-    rbm = RBM()
+    rbm = RBM(hidden=50)
     X_train, Y_train = RBM.read_data('digitstrain.txt')
     X_valid, Y_valid = RBM.read_data('digitsvalid.txt')
     rbm.train(0.1, 1, 32, 300, X_train, X_valid)
