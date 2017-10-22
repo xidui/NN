@@ -126,7 +126,7 @@ if __name__ == '__main__':
     #     plt.close()
 
     # problem g
-    for hidden in [100]:
+    # for hidden in [50, 100, 200, 500]:
         # rbm = RBM(hidden=hidden)
         # X_train, Y_train = RBM.read_data('digitstrain.txt')
         # X_valid, Y_valid = RBM.read_data('digitstest.txt')
@@ -138,45 +138,45 @@ if __name__ == '__main__':
         # ae = AE(dimensions=(784, hidden, 784), learning_rate=0.01, seed=seed, dropout=0.2)
         # ae.train(train_data_file='digitstrain.txt', epoches=1000, batch=32)
 
-        if hidden == 100:
-            models = {
-                'baseline': (None, None, 'blue'),
-                'rbm': load_model('rbm_models/lr_0.1_k_1_batch_32_epoch_500') + ('green',),
-                'ae': load_model('ae_models/lr_0.01_dropout_0.0_batch_32_epoch_1000') + (
-                'purple',),
-                'ae_noise_0.2': load_model(
-                    'ae_models/lr_0.01_dropout_0.2_batch_32_epoch_1000') + ('yellow',),
-            }
-        else:
-            models = {
-                'baseline': (None, None, 'blue'),
-                'rbm': load_model('rbm_models/lr_0.1_hidden_{0}_k_1_batch_32_epoch_500'.format(hidden)) + ('green',),
-                'ae': load_model('ae_models/lr_0.01_hidden_{0}_dropout_0.0_batch_32_epoch_1000'.format(hidden)) + (
-                'purple',),
-                'ae_noise_0.2': load_model(
-                    'ae_models/lr_0.01_hidden_{0}_dropout_0.2_batch_32_epoch_1000'.format(hidden)) + ('yellow',),
-            }
-
-        plot_data = []
-        for key, value in models.items():
-            nn = NN(seed=seed, learning_rate=0.01, dimensions=(784, hidden, 10), momentum=0.5, reg_lambda=0.00001, W=value[0],
-                    B=value[1])
-            plot_data.append((key, value[2],
-                              nn.train(train_data_file='digitstrain.txt', validate_data_file='digitstest.txt',
-                                       epoches=300, batch=32, start_from_latest=False)))
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        legend = []
-        for key, color, pd in plot_data:
-            ax.plot(range(1, len(pd['valid_incorrect']) + 1), pd['valid_incorrect'], color=color)
-            ax.set_ylabel('incorrect')
-            ax.set_xlabel('epoches')
-            legend.append(key)
-        ax.legend(legend)
-        name = 'compare_models_{0}.png'.format(hidden)
-        ax.set_title(name)
-        plt.savefig(name)
-        plt.close()
+        # if hidden == 100:
+        #     models = {
+        #         'baseline': (None, None, 'blue'),
+        #         'rbm': load_model('rbm_models/lr_0.1_k_1_batch_32_epoch_500') + ('green',),
+        #         'ae': load_model('ae_models/lr_0.01_dropout_0.0_batch_32_epoch_1000') + (
+        #         'purple',),
+        #         'ae_noise_0.2': load_model(
+        #             'ae_models/lr_0.01_dropout_0.2_batch_32_epoch_1000') + ('yellow',),
+        #     }
+        # else:
+        #     models = {
+        #         'baseline': (None, None, 'blue'),
+        #         'rbm': load_model('rbm_models/lr_0.1_hidden_{0}_k_1_batch_32_epoch_500'.format(hidden)) + ('green',),
+        #         'ae': load_model('ae_models/lr_0.01_hidden_{0}_dropout_0.0_batch_32_epoch_1000'.format(hidden)) + (
+        #         'purple',),
+        #         'ae_noise_0.2': load_model(
+        #             'ae_models/lr_0.01_hidden_{0}_dropout_0.2_batch_32_epoch_1000'.format(hidden)) + ('yellow',),
+        #     }
+        #
+        # plot_data = []
+        # for key, value in models.items():
+        #     nn = NN(seed=seed, learning_rate=0.01, dimensions=(784, hidden, 10), momentum=0.5, reg_lambda=0.00001, W=value[0],
+        #             B=value[1])
+        #     plot_data.append((key, value[2],
+        #                       nn.train(train_data_file='digitstrain.txt', validate_data_file='digitstest.txt',
+        #                                epoches=300, batch=32, start_from_latest=False)))
+        #
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # legend = []
+        # for key, color, pd in plot_data:
+        #     ax.plot(range(1, len(pd['valid_incorrect']) + 1), pd['valid_incorrect'], color=color)
+        #     ax.set_ylabel('incorrect')
+        #     ax.set_xlabel('epoches')
+        #     legend.append(key)
+        # ax.legend(legend)
+        # name = 'compare_models_{0}.png'.format(hidden)
+        # ax.set_title(name)
+        # plt.savefig(name)
+        # plt.close()
 
     pass

@@ -1,4 +1,4 @@
-# NN
+# NN RBM AE
 
 ### how to use this code
 ```python
@@ -17,4 +17,11 @@ n.load_model('model_data_in_models_dir')
 n.plot('model_data_in_models_dir')
 ```
 
+### For homework2
 
+RBM is implemented in `rbm.py`.
+
+Autoencoder is implemented in `ae.py`.
+
+Experiments for each question is in `__init__.py`. If you want to run the experient for specific question,
+simply uncomment the code and run `python __init__.py` is ok.

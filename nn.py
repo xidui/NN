@@ -31,7 +31,8 @@ def plot(filename):
 
 class NN:
     def __init__(self, learning_rate=0.5, reg_lambda=0.0, momentum=0.0,
-                 dimensions=(784, 100, 10), seed=2017, active_function=sigmoid, batch_norm=False):
+                 dimensions=(784, 100, 10), seed=2017, active_function=sigmoid,
+                 batch_norm=False, W=None, B=None):
         np.random.seed(seed)
         self.seed = seed
         self.learning_rate = learning_rate
@@ -55,8 +56,12 @@ class NN:
             input_dim = self.dimensions[i]
             output_dim = self.dimensions[i + 1]
             b = np.sqrt(6. / (input_dim + output_dim))
-            self.models['W'].append(np.random.uniform(-b, b, (input_dim, output_dim)))
-            self.models['B'].append(np.zeros((1, output_dim)))
+            if i == 0 and W is not None and B is not None:
+                self.models['W'].append(np.array(W).reshape(input_dim, output_dim))
+                self.models['B'].append(np.array(B).reshape(1, output_dim))
+            else:
+                self.models['W'].append(np.random.uniform(-b, b, (input_dim, output_dim)))
+                self.models['B'].append(np.zeros((1, output_dim)))
             self.models['dW'].append(np.zeros((input_dim, output_dim)))
             self.models['dB'].append(np.zeros((1, output_dim)))
             self.models['gamma'].append(np.ones(output_dim))
@@ -305,7 +310,7 @@ class NN:
             if self.reg_lambda != 0:
                 title = '{0}_reg_{1}'.format(title, self.reg_lambda)
             name = '{0}_epoch_{1}'.format(title, epoch)
-            if epoch % 4 == 0:
+            if epoch % 1 == 0:
                 plot_data['epochs'].append(epoch)
 
                 # loss of train data
@@ -319,7 +324,7 @@ class NN:
 
                 plot_data['loss_valid'].append(lv)
                 # loss of validation data
-                print("itr {0}: {1}, {2}".format(epoch, lt, lv))
+                # print("itr {0}: {1}, {2}".format(epoch, lt, lv))
 
                 train_predict = self.predict(X_train)
                 result_train = train_predict == Y_train
@@ -328,13 +333,15 @@ class NN:
 
                 plot_data['train_incorrect'].append(1 - np.sum(result_train) / (result_train.size + 0.0))
                 plot_data['valid_incorrect'].append(1 - np.sum(result_validate) / (result_validate.size + 0.0))
-                print("incorrectness: {0} {1}".format(plot_data['train_incorrect'][-1], plot_data['valid_incorrect'][-1]))
+                print("itr {2} incorrectness: {0} {1}".format(plot_data['train_incorrect'][-1], plot_data['valid_incorrect'][-1], epoch))
 
             if epoch % 100 == 0:
                 self.save_model(name)
                 self.plot_data(title=title, plot_data=plot_data, name=name)
                 # save plot data
                 self.save_plot_data(plot_data, name)
+
+        return plot_data
 
 if __name__ == '__main__':
     # problem a, b
