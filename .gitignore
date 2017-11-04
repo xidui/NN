@@ -12,3 +12,5 @@ rbm_plot_models
 models_backup
 pictures_backup
 plot_data_backup
+*.pyc
+*.png

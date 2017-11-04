@@ -4,6 +4,24 @@ import os
 import json
 
 
+def sigmoid(X):
+    return 1 / (1 + np.exp(-X))
+
+
+def softmax(X):
+    tmp = np.exp(X)
+    return tmp / np.sum(tmp, axis=1, keepdims=True)
+
+
+def tanh(X):
+    return np.tanh(X)
+
+
+def relu(X):
+    return np.maximum(X, 0)
+
+
+
 def plot_model(model, title, save_file):
     fig, ax = plt.subplots(nrows=10, ncols=10)
     for r in range(10):
