@@ -119,13 +119,6 @@ class NGram:
         for epoch in range(epochs):
             start = 0
             train_loss = 0.0
-            momentum = {
-                'embed_to_hid_weights': None,
-                'embed_to_hid_bias': None,
-                'hid_to_output_weights': None,
-                'hid_to_output_bias': None,
-                'word_encoding': None,
-            }
             while start < train_size:
                 # print start, train_size
                 end = min(start + batch, train_size)
