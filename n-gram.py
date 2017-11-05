@@ -7,7 +7,7 @@ N = 4
 EMBEDDING_DIMENSION = 16
 VOCABULARY = 8000
 HIDDEN = 128
-BATCH_SIZE = 128  # todo
+BATCH_SIZE = 256  # todo
 lr = 0.1
 
 
@@ -77,7 +77,31 @@ class NGram:
         loss /= x.shape[0]
         return loss
 
-    def train(self, train_file, val_file, lr, epoches, batch):
+    def calculate_perplexity(self, val_file):
+        total_perplexity = 0.0
+        total_sentence = 0
+        valid_size = 0
+        val_loss = 0.0
+        for line in utils.get_lines(val_file):
+            valid_label_x, valid_y = self.get_label_from_words([line])
+            valid_vector_x = self.get_input_vector_from_label(valid_label_x)
+            total_sentence += 1
+            valid_size += len(valid_y)
+            # predict
+            hidden_input_batch = valid_vector_x.dot(
+                self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
+            output_batch = hidden_input_batch.dot(
+                self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
+            output_batch = utils.softmax(output_batch)
+            val_loss += np.sum(-np.log2(output_batch[range(len(valid_y)), valid_y]))
+            probs = output_batch[range(len(valid_y)), valid_y]
+            # print probs
+            probs = -np.log2(probs)
+            perplexity = 2 ** np.mean(probs)
+            total_perplexity += perplexity
+        return val_loss / valid_size, total_perplexity / total_sentence
+
+    def train(self, train_file, val_file, lr, epochs, batch):
         # handle input
         self.vocabulary = self.create_vocabulary(train_file)
         lines = utils.get_lines('train.txt')
@@ -85,7 +109,7 @@ class NGram:
         train_size = train_label_x.shape[0]
 
         # train
-        for epoch in range(epoches):
+        for epoch in range(epochs):
             start = 0
             train_loss = 0.0
             while start < train_size:
@@ -135,33 +159,13 @@ class NGram:
                 start += batch_size
 
             # calculate perplexity
-            total_perplexity = 0.0
-            total_sentence = 0
-            valid_size = 0
-            val_loss = 0.0
-            for line in utils.get_lines(val_file):
-                valid_label_x, valid_y = self.get_label_from_words([line])
-                valid_vector_x = self.get_input_vector_from_label(valid_label_x)
-                total_sentence += 1
-                valid_size += len(valid_y)
-                # predict
-                hidden_input_batch = valid_vector_x.dot(
-                    self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
-                output_batch = hidden_input_batch.dot(
-                    self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
-                output_batch = utils.softmax(output_batch)
-                val_loss += np.sum(-np.log2(output_batch[range(len(valid_y)), valid_y]))
-                probs = output_batch[range(len(valid_y)), valid_y]
-                # print probs
-                probs = -np.log2(probs)
-                perplexity = 2 ** np.mean(probs)
-                total_perplexity += perplexity
+            val_loss, perplexity = self.calculate_perplexity(val_file=val_file)
 
             print 'epoch: {0}, train loss: {1}, valid loss: {2}, perplexity: {3}'.format(
                 epoch,
                 train_loss / train_size,
-                val_loss / valid_size,
-                total_perplexity / total_sentence
+                val_loss,
+                perplexity
             )
 
 
@@ -185,4 +189,4 @@ if __name__ == '__main__':
                   embedding_dimension=EMBEDDING_DIMENSION,
                   vocabulary_size=VOCABULARY,
                   hidden=HIDDEN)
-    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epoches=500, batch=BATCH_SIZE)
+    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE)
