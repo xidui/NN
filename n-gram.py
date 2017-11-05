@@ -8,8 +8,8 @@ EMBEDDING_DIMENSION = 16
 VOCABULARY = 8000
 HIDDEN = 128
 BATCH_SIZE = 256  # todo
-lr = 0.01
-mom=0.5
+lr = 0.1
+mom = 0.5
 
 
 class NGram:
@@ -19,11 +19,13 @@ class NGram:
         self.embedding_dimension = embedding_dimension
         self.vocabulary_size = vocabulary_size
         self.vocabulary = None
+
+        self.rs = np.random.RandomState(2017)
         self.model = {
-            'word_encoding': np.random.randn(vocabulary_size, embedding_dimension),
-            'embed_to_hid_weights': np.random.randn((n - 1) * embedding_dimension, hidden),
+            'word_encoding': self.rs.uniform(low=-1, high=1, size=(vocabulary_size, embedding_dimension)),
+            'embed_to_hid_weights': self.rs.uniform(low=-1, high=1, size=((n - 1) * embedding_dimension, hidden)),
             'embed_to_hid_bias': np.zeros(hidden),
-            'hid_to_output_weights': np.random.randn(hidden, vocabulary_size),
+            'hid_to_output_weights': self.rs.uniform(low=-1, high=1, size=(hidden, vocabulary_size)),
             'hid_to_output_bias': np.zeros(vocabulary_size)
         }
         self.momentum = {
@@ -190,8 +192,6 @@ class NGram:
 
 
 if __name__ == '__main__':
-    np.random.seed(2017)
-
     # problem 3.1
     # lines = get_lines('train.txt')
     # gram_count = defaultdict(int)
@@ -209,4 +209,4 @@ if __name__ == '__main__':
                   embedding_dimension=EMBEDDING_DIMENSION,
                   vocabulary_size=VOCABULARY,
                   hidden=HIDDEN)
-    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=mom, activation=True)
+    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=mom, activation=False)
