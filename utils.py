@@ -33,3 +33,10 @@ def plot_model(model, title, save_file):
         fig.suptitle(title)
     fig.savefig(save_file)
     plt.close()
+
+
+def get_lines(file):
+    f = open(file, 'r')
+    lines = f.readlines()
+    f.close()
+    return lines
