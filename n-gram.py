@@ -8,7 +8,8 @@ EMBEDDING_DIMENSION = 16
 VOCABULARY = 8000
 HIDDEN = 128
 BATCH_SIZE = 256  # todo
-lr = 0.1
+lr = 0.01
+mom=0.5
 
 
 class NGram:
@@ -108,7 +109,7 @@ class NGram:
             total_perplexity += perplexity
         return val_loss / valid_size, total_perplexity / total_sentence
 
-    def train(self, train_file, val_file, lr, epochs, batch, mom=0.5):
+    def train(self, train_file, val_file, lr, epochs, batch, mom=0.5, activation=False):
         # handle input
         self.vocabulary = self.create_vocabulary(train_file)
         lines = utils.get_lines('train.txt')
@@ -129,6 +130,8 @@ class NGram:
                 # forward
                 hidden_input_batch = train_vector_x_batch.dot(
                     self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
+                if activation:
+                    hidden_input_batch = np.tanh(hidden_input_batch)
                 output_batch = hidden_input_batch.dot(
                     self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
                 output_batch = utils.softmax(output_batch)
@@ -144,6 +147,8 @@ class NGram:
                 d_hid_to_output_bias = np.sum(D, axis=0) / batch_size  # (8000)
 
                 D = D.dot(self.model['hid_to_output_weights'].T)  # (batch, 8000) * (8000, 128) = (batch, 128)
+                if activation:
+                    D = D * (1 - hidden_input_batch * hidden_input_batch)
                 d_embed_to_hid_weights = train_vector_x_batch.T.dot(
                     D) / batch_size  # (48, batch) * (batch, 128) = (48, 128)
                 d_embed_to_hid_bias = np.sum(D, axis=0) / batch_size  # (128)
@@ -204,4 +209,4 @@ if __name__ == '__main__':
                   embedding_dimension=EMBEDDING_DIMENSION,
                   vocabulary_size=VOCABULARY,
                   hidden=HIDDEN)
-    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=0.5)
+    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=mom, activation=True)
