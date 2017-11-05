@@ -25,6 +25,13 @@ class NGram:
             'hid_to_output_weights': np.random.randn(hidden, vocabulary_size),
             'hid_to_output_bias': np.zeros(vocabulary_size)
         }
+        self.momentum = {
+            'd_word_encoding': np.zeros((vocabulary_size, embedding_dimension)),
+            'd_embed_to_hid_weights': np.zeros(((n - 1) * embedding_dimension, hidden)),
+            'd_embed_to_hid_bias': np.zeros(hidden),
+            'd_hid_to_output_weights': np.zeros((hidden, vocabulary_size)),
+            'd_hid_to_output_bias': np.zeros(vocabulary_size)
+        }
 
     def create_vocabulary(self, train_file):
         dic = defaultdict(int)
@@ -101,7 +108,7 @@ class NGram:
             total_perplexity += perplexity
         return val_loss / valid_size, total_perplexity / total_sentence
 
-    def train(self, train_file, val_file, lr, epochs, batch):
+    def train(self, train_file, val_file, lr, epochs, batch, mom=0.5):
         # handle input
         self.vocabulary = self.create_vocabulary(train_file)
         lines = utils.get_lines('train.txt')
@@ -112,6 +119,13 @@ class NGram:
         for epoch in range(epochs):
             start = 0
             train_loss = 0.0
+            momentum = {
+                'embed_to_hid_weights': None,
+                'embed_to_hid_bias': None,
+                'hid_to_output_weights': None,
+                'hid_to_output_bias': None,
+                'word_encoding': None,
+            }
             while start < train_size:
                 # print start, train_size
                 end = min(start + batch, train_size)
@@ -149,12 +163,20 @@ class NGram:
                         input_index = train_label_x_batch[i, j]
                         d_word_encoding[input_index] += tmp
                 d_word_encoding /= batch_size  # todo
+
                 # update weight
-                self.model['embed_to_hid_weights'] -= lr * d_embed_to_hid_weights
-                self.model['embed_to_hid_bias'] -= lr * d_embed_to_hid_bias
-                self.model['hid_to_output_weights'] -= lr * d_hid_to_output_weights
-                self.model['hid_to_output_bias'] -= lr * d_hid_to_output_bias
-                self.model['word_encoding'] -= lr * d_word_encoding
+                self.momentum['d_embed_to_hid_weights'] = -lr * d_embed_to_hid_weights + self.momentum['d_embed_to_hid_weights'] * mom
+                self.momentum['d_embed_to_hid_bias'] = -lr * d_embed_to_hid_bias + self.momentum['d_embed_to_hid_bias'] * mom
+                self.momentum['d_hid_to_output_weights'] = -lr * d_hid_to_output_weights + self.momentum['d_hid_to_output_weights'] * mom
+                self.momentum['d_hid_to_output_bias'] = -lr * d_hid_to_output_bias + self.momentum['d_hid_to_output_bias'] * mom
+                self.momentum['d_word_encoding'] = -lr * d_word_encoding + self.momentum['d_word_encoding'] * mom
+
+                self.model['embed_to_hid_weights'] += self.momentum['d_embed_to_hid_weights']
+                self.model['embed_to_hid_bias'] += self.momentum['d_embed_to_hid_bias']
+                self.model['hid_to_output_weights'] += self.momentum['d_hid_to_output_weights']
+                self.model['hid_to_output_bias'] += self.momentum['d_hid_to_output_bias']
+                self.model['word_encoding'] += self.momentum['d_word_encoding']
+
                 # update start position
                 start += batch_size
 
@@ -189,4 +211,4 @@ if __name__ == '__main__':
                   embedding_dimension=EMBEDDING_DIMENSION,
                   vocabulary_size=VOCABULARY,
                   hidden=HIDDEN)
-    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE)
+    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=0.5)
