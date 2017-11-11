@@ -1,5 +1,8 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import os
 import utils
+import json
 from collections import defaultdict
 
 
@@ -8,24 +11,25 @@ EMBEDDING_DIMENSION = 16
 VOCABULARY = 8000
 HIDDEN = 128
 BATCH_SIZE = 256  # todo
-lr = 0.1
-mom = 0.5
+lr = 0.05
+mom = 0.2
 
 
 class NGram:
-    def __init__(self, n, embedding_dimension, vocabulary_size, hidden):
+    def __init__(self, n, embedding_dimension, vocabulary_size, hidden, activation=False):
         self.n = n
         self.hidden = hidden
         self.embedding_dimension = embedding_dimension
         self.vocabulary_size = vocabulary_size
+        self.activation = activation
         self.vocabulary = None
 
         self.rs = np.random.RandomState(2017)
         self.model = {
-            'word_encoding': self.rs.uniform(low=-1, high=1, size=(vocabulary_size, embedding_dimension)),
-            'embed_to_hid_weights': self.rs.uniform(low=-1, high=1, size=((n - 1) * embedding_dimension, hidden)),
+            'word_encoding': self.rs.normal(loc=0, scale=0.1, size=(vocabulary_size, embedding_dimension)),
+            'embed_to_hid_weights': self.rs.normal(loc=0, scale=0.1, size=((n - 1) * embedding_dimension, hidden)),
             'embed_to_hid_bias': np.zeros(hidden),
-            'hid_to_output_weights': self.rs.uniform(low=-1, high=1, size=(hidden, vocabulary_size)),
+            'hid_to_output_weights': self.rs.normal(loc=0, scale=1, size=(hidden, vocabulary_size)),
             'hid_to_output_bias': np.zeros(vocabulary_size)
         }
         self.momentum = {
@@ -35,6 +39,10 @@ class NGram:
             'd_hid_to_output_weights': np.zeros((hidden, vocabulary_size)),
             'd_hid_to_output_bias': np.zeros(vocabulary_size)
         }
+
+        for dir in ['n_gram_models', 'n_gram_pictures']:
+            if not os.path.exists(dir):
+                os.makedirs(dir)
 
     def create_vocabulary(self, train_file):
         dic = defaultdict(int)
@@ -62,7 +70,7 @@ class NGram:
                 gram = [V['UNK'] if word not in V else V[word] for word in words[i: i + self.n]]
                 data_set.append(gram)
 
-        # np.random.shuffle(data_set)  # todo shuffle will increase the perplexity
+        np.random.shuffle(data_set)  # todo shuffle will increase the perplexity
         label_x = []
         label_y = []
         for l in data_set:
@@ -100,6 +108,8 @@ class NGram:
             # predict
             hidden_input_batch = valid_vector_x.dot(
                 self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
+            if self.activation:
+                hidden_input_batch = np.tanh(hidden_input_batch)
             output_batch = hidden_input_batch.dot(
                 self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
             output_batch = utils.softmax(output_batch)
@@ -111,12 +121,95 @@ class NGram:
             total_perplexity += perplexity
         return val_loss / valid_size, total_perplexity / total_sentence
 
-    def train(self, train_file, val_file, lr, epochs, batch, mom=0.5, activation=False):
+    def save_model(self, name):
+        model = {
+            'vocabulary': self.vocabulary,
+            'word_encoding': self.model['word_encoding'].tolist(),
+            'embed_to_hid_weights': self.model['embed_to_hid_weights'].tolist(),
+            'embed_to_hid_bias': self.model['embed_to_hid_bias'].tolist(),
+            'hid_to_output_weights': self.model['hid_to_output_weights'].tolist(),
+            'hid_to_output_bias': self.model['hid_to_output_bias'].tolist()
+        }
+        f = open('n_gram_models/{0}'.format(name), 'w')
+        f.write(json.dumps(model))
+        f.close()
+
+    def load_model(self, name):
+        with open('n_gram_models/{0}'.format(name), 'r') as json_data:
+            data = json.load(json_data)
+            if 'vocabulary' in data:
+                self.vocabulary = data['vocabulary']
+            else:
+                self.vocabulary = self.create_vocabulary('train.txt')
+            self.model = {
+                'word_encoding': np.array(data['word_encoding']),
+                'embed_to_hid_weights': np.array(data['embed_to_hid_weights']),
+                'embed_to_hid_bias': np.array(data['embed_to_hid_bias']),
+                'hid_to_output_weights': np.array(data['hid_to_output_weights']),
+                'hid_to_output_bias': np.array(data['hid_to_output_bias']),
+            }
+
+    def predict(self, words, times):
+        V = self.vocabulary
+        reverse_vocabulary = dict([(item[1], item[0]) for item in V.items()])
+        for _ in range(times):
+            labels = np.array([[V['UNK'] if word not in V else V[word] for word in words[-3:]]])
+            vector_x = self.get_input_vector_from_label(labels)
+            # predict
+            hidden_input_batch = vector_x.dot(
+                self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
+            if self.activation:
+                hidden_input_batch = np.tanh(hidden_input_batch)
+            output_batch = hidden_input_batch.dot(
+                self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
+            output_batch = utils.softmax(output_batch)
+            chosen = output_batch.argmax(axis=1)
+            new_word = reverse_vocabulary[chosen[0]]
+            words.append(new_word)
+            if new_word == 'END':
+                break
+        return words
+
+    def plot_result(self, name, perplexity, train_loss, val_loss):
+        epoches = range(1, len(perplexity) + 1)
+        plt.figure(1)
+        plt.plot(epoches, perplexity)
+        plt.ylabel('perplexity')
+        plt.xlabel('epoches')
+        plt.title(name)
+        plt.savefig('n_gram_pictures/perplexity_{0}'.format(name))
+        plt.close()
+
+        plt.figure(2)
+        plt.plot(epoches, train_loss, color='blue')
+        plt.plot(epoches, val_loss, color='green')
+        plt.ylabel('average loss')
+        plt.legend(['train', 'valid'])
+        plt.title(name)
+        plt.savefig('n_gram_pictures/loss_{0}.png'.format(name))
+        plt.close()
+
+    def get_nearest(self, word, count):
+        reverse_vocabulary = dict([(item[1], item[0]) for item in self.vocabulary.items()])
+        label = self.vocabulary[word] if word in self.vocabulary else self.vocabulary['UNK']
+        vector = self.model['word_encoding'][label, :]
+        result = []
+        for i in range(self.vocabulary_size):
+            tmp = self.model['word_encoding'][i, :]
+            distance = np.sqrt(np.sum((vector - tmp) ** 2))
+            result.append((distance, reverse_vocabulary[i]))
+        return sorted(result, key=lambda x:x[0])[1:count+1]
+
+    def train(self, train_file, val_file, lr, epochs, batch, mom=0.5):
         # handle input
         self.vocabulary = self.create_vocabulary(train_file)
         lines = utils.get_lines('train.txt')
         train_label_x, train_y = self.get_label_from_words(lines)
         train_size = train_label_x.shape[0]
+
+        perplexity_list = []
+        train_loss_list = []
+        val_loss_list = []
 
         # train
         for epoch in range(epochs):
@@ -126,18 +219,20 @@ class NGram:
                 # print start, train_size
                 end = min(start + batch, train_size)
                 batch_size = end - start
-                train_label_x_batch = train_label_x[start:end, :]
+                train_label_x_batch = train_label_x[start:start+batch_size, :]
                 train_vector_x_batch = self.get_input_vector_from_label(train_label_x_batch)
-                y_batch = train_y[start: end]
+                y_batch = train_y[start: start+batch_size]
                 # forward
                 hidden_input_batch = train_vector_x_batch.dot(
                     self.model['embed_to_hid_weights']) + self.model['embed_to_hid_bias']  # (batch, 128)
-                if activation:
+                if self.activation:
                     hidden_input_batch = np.tanh(hidden_input_batch)
                 output_batch = hidden_input_batch.dot(
                     self.model['hid_to_output_weights']) + self.model['hid_to_output_bias']
                 output_batch = utils.softmax(output_batch)
 
+                x = output_batch[range(batch_size), y_batch]
+                y = np.max(output_batch, axis=1)
                 # loss
                 train_loss += np.sum(-np.log2(output_batch[range(batch_size), y_batch]))
 
@@ -149,10 +244,9 @@ class NGram:
                 d_hid_to_output_bias = np.sum(D, axis=0) / batch_size  # (8000)
 
                 D = D.dot(self.model['hid_to_output_weights'].T)  # (batch, 8000) * (8000, 128) = (batch, 128)
-                if activation:
+                if self.activation:
                     D = D * (1 - hidden_input_batch * hidden_input_batch)
-                d_embed_to_hid_weights = train_vector_x_batch.T.dot(
-                    D) / batch_size  # (48, batch) * (batch, 128) = (48, 128)
+                d_embed_to_hid_weights = train_vector_x_batch.T.dot(D) / batch_size  # (48, batch) * (batch, 128) = (48, 128)
                 d_embed_to_hid_bias = np.sum(D, axis=0) / batch_size  # (128)
 
                 D = D.dot(self.model['embed_to_hid_weights'].T)  # (batch, 128) * (128, 48) = (batch, 48)
@@ -183,6 +277,10 @@ class NGram:
             # calculate perplexity
             val_loss, perplexity = self.calculate_perplexity(val_file=val_file)
 
+            perplexity_list.append(perplexity)
+            val_loss_list.append(val_loss)
+            train_loss_list.append(train_loss / train_size)
+
             print 'epoch: {0}, train loss: {1}, valid loss: {2}, perplexity: {3}'.format(
                 epoch,
                 train_loss / train_size,
@@ -190,10 +288,27 @@ class NGram:
                 perplexity
             )
 
+            if (epoch + 1) % 10 == 0:
+                name = 'epoch_{0}_n_{1}_hidden_{2}_activation_{3}'.format(
+                    epoch + 1,
+                    self.n,
+                    self.hidden,
+                    self.activation
+                )
+                self.save_model(name)
+                self.plot_result(name, perplexity_list, train_loss_list, val_loss_list)
+        return val_loss_list
+
 
 if __name__ == '__main__':
     # problem 3.1
-    # lines = get_lines('train.txt')
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=HIDDEN)
+    # vocabulary = ngram.create_vocabulary('train.txt')
+    # reverse_vocabulary = dict([(item[1], item[0])for item in vocabulary.items()])
+    # lines = utils.get_lines('train.txt')
     # gram_count = defaultdict(int)
     # for l in lines:
     #     words = l.split()
@@ -202,11 +317,86 @@ if __name__ == '__main__':
     #     for i in range(len(words) - 3):
     #         gram = [vocabulary['UNK'] if word not in vocabulary else vocabulary[word] for word in words[i: i+N]]
     #         gram_count[tuple(gram)] += 1
-    # print sorted(gram_count.values(), reverse=True)[:50]
+    #
+    # y = sorted(gram_count.values(), reverse=True)
+    # x = range(1, len(y) + 1)
+    # plt.plot(x[:1000], y[:1000], color='blue')
+    # plt.title("Gram Distribution")
+    # plt.xlabel("word")
+    # plt.ylabel("Frequency")
+    # plt.savefig('ngram_distribution.png')
+    # plt.close()
+    # items = sorted(gram_count.items(), key=lambda x:x[1], reverse=True)[:50]
+    # index = 1
+    # for grams, count in items:
+    #     words = [reverse_vocabulary[g] for g in grams]
+    #     print '{2: <2} |{0: <30} | count:{1}'.format(' '.join(words), count, index)
+    #     index += 1
 
     # problem 3.2
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=HIDDEN)
+    # val_loss_1 = ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=100, batch=BATCH_SIZE, mom=mom)
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=256)
+    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=200, batch=BATCH_SIZE, mom=mom)
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=512)
+    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=200, batch=BATCH_SIZE, mom=mom)
+    #
+    # # problem 3.3
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=HIDDEN,
+    #               activation=True)
+    # val_loss_2 = ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=100, batch=BATCH_SIZE, mom=mom)
+    # epoches = range(1, len(val_loss_1) + 1)
+    # plt.figure(3)
+    # plt.plot(epoches, val_loss_1, color='blue')
+    # plt.plot(epoches, val_loss_2, color='green')
+    # plt.ylabel('validation loss')
+    # plt.legend(['linear', 'tanh'])
+    # plt.title('linear vs tanh')
+    # plt.savefig('n_gram_pictures/loss_compare.png')
+    # plt.close()
+
+    # problem 3.4
     ngram = NGram(n=N,
                   embedding_dimension=EMBEDDING_DIMENSION,
                   vocabulary_size=VOCABULARY,
-                  hidden=HIDDEN)
-    ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=500, batch=BATCH_SIZE, mom=mom, activation=False)
+                  hidden=HIDDEN,
+                  activation=False)
+    ngram.load_model('epoch_60_n_4_hidden_128_activation_False')
+    words_list = [
+        ['said', '0', '*t*-1'],
+        ['million', '*u*', ','],
+        ['the', 'company', 'said'],
+        ['new', 'york', 'stock'],
+        ['york', 'stock', 'exchange'],
+        ['and', 'chief', 'executive'],
+        ['says', '0', '*t*-1'],
+        [',', 'for', 'example'],
+        ['president', 'and', 'chief'],
+        ['START', 'the', 'company']
+    ]
+    for words in words_list:
+        sentence = ngram.predict(words, 10)
+        for word in sentence:
+            print word,
+        print ''
+
+    print ngram.get_nearest('said', 10)
+
+    # problem 3.5
+    ngram = NGram(n=N,
+                  embedding_dimension=2,
+                  vocabulary_size=VOCABULARY,
+                  hidden=HIDDEN,
+                  activation=False)
