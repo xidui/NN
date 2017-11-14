@@ -59,6 +59,14 @@ class NGram:
             tmp += 1
         return vocabulary
 
+    def get_word_count(self, train_file):
+        dic = defaultdict(int)
+        for l in utils.get_lines(train_file):
+            for word in l.split():
+                dic[word.lower()] += 1
+        word_count = dict(sorted(dic.items(), key=lambda x: x[1], reverse=True)[:self.vocabulary_size - 3])
+        return word_count
+
     def get_label_from_words(self, lines):
         V = self.vocabulary
         data_set = []
@@ -198,7 +206,8 @@ class NGram:
             tmp = self.model['word_encoding'][i, :]
             distance = np.sqrt(np.sum((vector - tmp) ** 2))
             result.append((distance, reverse_vocabulary[i]))
-        return sorted(result, key=lambda x:x[0])[1:count+1]
+        tmp = sorted(result, key=lambda x:x[0])[0:count]
+        return [(round(x[0], 3), x[1]) for x in tmp]
 
     def train(self, train_file, val_file, lr, epochs, batch, mom=0.5):
         # handle input
@@ -253,7 +262,7 @@ class NGram:
                 d_word_encoding = np.zeros((self.vocabulary_size, self.embedding_dimension))
                 for i in range(batch_size):
                     for j in range(3):
-                        tmp = D[i, 16 * j:16 * (j + 1)]
+                        tmp = D[i, self.embedding_dimension * j:self.embedding_dimension * (j + 1)]
                         input_index = train_label_x_batch[i, j]
                         d_word_encoding[input_index] += tmp
                 d_word_encoding /= batch_size  # todo
@@ -343,14 +352,14 @@ if __name__ == '__main__':
     #               embedding_dimension=EMBEDDING_DIMENSION,
     #               vocabulary_size=VOCABULARY,
     #               hidden=256)
-    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=200, batch=BATCH_SIZE, mom=mom)
+    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=100, batch=BATCH_SIZE, mom=mom)
     # ngram = NGram(n=N,
     #               embedding_dimension=EMBEDDING_DIMENSION,
     #               vocabulary_size=VOCABULARY,
     #               hidden=512)
-    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=200, batch=BATCH_SIZE, mom=mom)
-    #
-    # # problem 3.3
+    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=100, batch=BATCH_SIZE, mom=mom)
+
+    # problem 3.3
     # ngram = NGram(n=N,
     #               embedding_dimension=EMBEDDING_DIMENSION,
     #               vocabulary_size=VOCABULARY,
@@ -368,35 +377,67 @@ if __name__ == '__main__':
     # plt.close()
 
     # problem 3.4
-    ngram = NGram(n=N,
-                  embedding_dimension=EMBEDDING_DIMENSION,
-                  vocabulary_size=VOCABULARY,
-                  hidden=HIDDEN,
-                  activation=False)
-    ngram.load_model('epoch_60_n_4_hidden_128_activation_False')
-    words_list = [
-        ['said', '0', '*t*-1'],
-        ['million', '*u*', ','],
-        ['the', 'company', 'said'],
-        ['new', 'york', 'stock'],
-        ['york', 'stock', 'exchange'],
-        ['and', 'chief', 'executive'],
-        ['says', '0', '*t*-1'],
-        [',', 'for', 'example'],
-        ['president', 'and', 'chief'],
-        ['START', 'the', 'company']
-    ]
-    for words in words_list:
-        sentence = ngram.predict(words, 10)
-        for word in sentence:
-            print word,
-        print ''
+    # ngram = NGram(n=N,
+    #               embedding_dimension=EMBEDDING_DIMENSION,
+    #               vocabulary_size=VOCABULARY,
+    #               hidden=HIDDEN,
+    #               activation=False)
+    # ngram.load_model('epoch_60_n_4_hidden_128_activation_True')
+    # words_list = [
+    #     ['said', '0', '*t*-1'],
+    #     ['million', '*u*', ','],
+    #     ['the', 'company', 'said'],
+    #     ['new', 'york', 'stock'],
+    #     ['york', 'stock', 'exchange'],
+    #     ['and', 'chief', 'executive'],
+    #     ['says', '0', '*t*-1'],
+    #     [',', 'for', 'example'],
+    #     ['president', 'and', 'chief'],
+    #     ['START', 'the', 'company']
+    # ]
+    # for words in words_list:
+    #     sentence = ngram.predict(words, 10)
+    #     for word in sentence:
+    #         print word,
+    #     print ''
 
-    print ngram.get_nearest('said', 10)
-
-    # problem 3.5
+    # print ngram.get_nearest('for', 11)
+    #
+    # # problem 3.5
     ngram = NGram(n=N,
                   embedding_dimension=2,
                   vocabulary_size=VOCABULARY,
                   hidden=HIDDEN,
                   activation=False)
+    # ngram.train(train_file='train.txt', val_file='val.txt', lr=lr, epochs=100, batch=BATCH_SIZE, mom=mom)
+    vocabulary = ngram.create_vocabulary('train.txt')
+    reverse_vocabulary = dict([(item[1], item[0]) for item in vocabulary.items()])
+    word_count = ngram.get_word_count('train.txt')
+    ngram.load_model('epoch_100_n_4_hidden_128_activation_False')
+    tmp = list(enumerate(ngram.model['word_encoding'].tolist()))
+
+    chosen_i = None
+    chosen_v = None
+    flag = False
+    while not flag:
+        np.random.shuffle(tmp)
+        for i, v in tmp[:500]:
+            if reverse_vocabulary[i] == 'discuss':
+                chosen_i = i
+                chosen_v = v
+                flag = True
+                temp = tmp[:500]
+                break
+    print reverse_vocabulary[chosen_i]
+
+    result = []
+    for index, vector in temp:
+        distance = np.sqrt(np.sum((np.array(vector) - np.array(chosen_v)) ** 2))
+        result.append((index, reverse_vocabulary[index], distance,  vector))
+    result = sorted(result, key=lambda x: x[2])[0:20]
+    print [x[1] for x in result]
+    plt.scatter([x[0] for _, x in temp], [x[1] for _, x in temp])
+    plt.scatter([x[3][0] for x in result], [x[3][1] for x in result], color='green')
+    plt.scatter([chosen_v[0]], chosen_v[1], color='red')
+    plt.title('500 words')
+    plt.show()
