@@ -25,3 +25,16 @@ Autoencoder is implemented in `ae.py`.
 
 Experiments for each question is in `__init__.py`. If you want to run the experient for specific question,
 simply uncomment the code and run `python __init__.py` is ok.
+
+### For homework3
+
+My implementation for ngram is in `ngram.py`.
+I used `GRU` and `pytorch` to implement ngram for extra credit. It is in `gru.py`
+
+To run my code:
+```python
+python ngram.py
+python gru.py
+```
+
+To run each of the sub problem, comment and uncomment the corresponding code will be ok.
